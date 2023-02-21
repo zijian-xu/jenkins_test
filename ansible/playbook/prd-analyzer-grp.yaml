@@ -1,0 +1,35 @@
+---
+
+- name: Deploy Production Analyzer Group
+  hosts: prd_analyzer_grp
+  any_errors_fatal: true
+  serial: 1
+  gather_facts: no
+  tasks:
+    - name: "{{ repo }} Deployment"
+      block:
+        - name: Set Block Status
+          set_fact:
+            block_status: "FAILED"
+
+        - name: Rsync to Destination
+          ansible.posix.synchronize:
+            # relative to the playbook path
+            src: "../../../{{ repo }}"
+            dest: "{{ deployment_path }}"
+            recursive: true
+            archive: no
+            perms: yes
+          register: rsync_result
+
+        - name: Update Block Status
+          set_fact:
+            block_status: "COMPLETED"
+          when: rsync_result.failed == false
+
+        - name: Abort the Play in case of Failure
+          ansible.builtin.fail:
+            msg: "[ERROR] Failed to deploy {{ repo }} on {{ inventory_hostname }}! Abort the play!"
+          when: block_status == 'FAILED'
+  vars:
+      repo: jenkins_test

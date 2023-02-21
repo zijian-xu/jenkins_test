@@ -1,0 +1,95 @@
+pipeline {
+    agent any
+    environment {
+        // repository
+        REPO = "jenkins_test"
+
+        SLACK_TOKEN_ID_ANSIBLE = "trading-systems-cicd-ansible"
+
+        // COL/COC/DAT Docker Workspace
+        DOCKER_WS = '/opt/app-root/src'
+    }
+    options {
+        ansiColor('xterm')
+    }
+    stages {
+
+        stage ('Precheck') {
+            agent {
+                // Equivalent to "docker build -t tarou-checker-py3 -f Dockerfile ./Taroumaru/jenkins/docker/
+                dockerfile {
+                    filename 'Dockerfile'
+                    dir "${REPO}/jenkins/docker"
+                    additionalBuildArgs '-t tarou-checker-py3'
+                }
+            }
+            steps {
+                script{
+                    def msg = '------------------ Precheck Stage ------------------'
+                }
+            }
+            post{
+                unsuccessful {
+                    script {
+                        def msg = 'Precheck Status: FAILED!'
+                        echo msg
+                    }
+                }
+                success {
+                    script {
+                        def msg = 'Precheck Status: SUCCESS!'
+                        echo msg
+                    }
+                }
+            }
+        }
+
+        stage ('Deploy-Prd-Fut-Analyzer-Group') {
+            steps {
+                script {
+                    def msg = '------------------ Deploy-Prd-Fut-Analyzer-Group Stage ------------------'
+                    
+
+                  ansiblePlaybook( 
+                    playbook: "${REPO}/ansible/playbook/prd-analyzer-grp.yaml",
+                    inventory: "${REPO}/ansible/inventory/prd-inventory.ini",
+                    colorized: true)
+
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "I have finished the pipeline!"
+        }
+        unsuccessful {
+            echo "Pipeline result: FAILED!"
+        }
+        success {
+            echo "Pipeline result: SUCCESS!"
+        }
+        cleanup {
+            sh "rm -rf *"
+            echo "Cleaned up workspace."
+        }
+    }
+}
+
+def sendToSlack(ws, channel, msg, token, colour) {
+
+    def slackResponse = slackSend(teamDomain: ws, 
+                                  channel: channel, 
+                                  color: colour,
+                                  message: msg, 
+                                  tokenCredentialId: token)
+
+    if(!slackResponse){
+        def message = "Failed to send to Slack."
+        echo message
+        //currentBuild.result = "FAILURE"
+    }
+}
+
+
